@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { SupabaseClient, Provider, ApiError } from "@supabase/supabase-js";
+import { SupabaseClient, Provider } from "@supabase/supabase-js";
 import {
   Input,
   Checkbox,
@@ -222,14 +222,17 @@ function SocialAuth({
   const handleProviderSignIn = async (provider: Provider) => {
     setLoading(true);
     try {
-      const url = await supabaseClient.auth.api.getUrlForProvider(provider, {
-        redirectTo,
-      });
+      const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        provider: provider,
+        options: { redirectTo: redirectTo },
+      })
+
+      if (error) throw error;
       // _top target requires sandbox="allow-top-navigation"
-      window.open(url);
+      window.open(data.url);
     } catch (e) {
-      const error = e as ApiError;
-      setError(error.message);
+      console.log(error)
+      setError(error);
     }
     setLoading(false);
   };
@@ -306,6 +309,9 @@ function EmailAuth({
 }) {
   const isMounted = useRef<boolean>(true);
   const [email, setEmail] = useState(defaultEmail);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState(defaultPassword);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rememberMe, setRememberMe] = useState(false);
@@ -334,30 +340,35 @@ function EmailAuth({
     setLoading(true);
     switch (authView) {
       case "sign_in":
-        const { error: signInError } = await supabaseClient.auth.signIn(
-          {
-            email,
-            password,
+        // sasha: need to redirect to redirectTo
+        const { data, error: signInError } = await supabaseClient.auth.signInWithPassword({
+            email: email,
+            password: password,
           },
-          { redirectTo }
         );
         if (signInError) setError(signInError.message);
         break;
       case "sign_up":
         const {
-          user: signUpUser,
-          session: signUpSession,
+          data: signUpUser,
           error: signUpError,
-        } = await supabaseClient.auth.signUp(
-          {
-            email,
-            password,
-          },
-          { redirectTo }
+        } = await supabaseClient.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+              emailRedirectTo: redirectTo,
+              data: {
+                first_name: firstName,
+                last_name: lastName,
+                phone: phone,
+              }
+            },
+          }
         );
+
         if (signUpError) setError(signUpError.message);
         // Check if session is null -> email confirmation setting is turned on
-        else if (signUpUser && !signUpSession)
+        else if (signUpUser && signUpUser.user && !signUpUser.session)
           setMessage("Check your email for the confirmation link.");
         break;
     }
@@ -398,6 +409,31 @@ function EmailAuth({
               setPassword(e.target.value)
             }
           />
+          {id === "auth-sign-up" && (
+            <div>
+            <Input
+              label="First name"
+              type="text"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setFirstName(e.target.value)
+              }
+              />
+              <Input
+              label="Last name"
+              type="text"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setLastName(e.target.value)
+              }
+              />
+              <Input
+              label="Phone number"
+              type="number"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setPhone(e.target.value)
+              }
+              />
+            </div>
+          )}
         </Space>
         <Space direction="vertical" size={6}>
           <Space style={{ justifyContent: "space-between" }}>
@@ -492,10 +528,9 @@ function MagicLink({
     setError("");
     setMessage("");
     setLoading(true);
-    const { error } = await supabaseClient.auth.signIn(
-      { email },
-      { redirectTo }
-    );
+    const { error } = await supabaseClient.auth.signInWithOtp({email: email, options: {
+      emailRedirectTo: redirectTo
+    }});
     if (error) setError(error.message);
     else setMessage("Check your email for the magic link");
     setLoading(false);
@@ -558,9 +593,9 @@ function ForgottenPassword({
     setError("");
     setMessage("");
     setLoading(true);
-    const { error } = await supabaseClient.auth.api.resetPasswordForEmail(
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(
       email,
-      { redirectTo }
+      { redirectTo: redirectTo}
     );
     if (error) setError(error.message);
     else setMessage("Check your email for the password reset link");
@@ -620,7 +655,7 @@ function UpdatePassword({
     setError("");
     setMessage("");
     setLoading(true);
-    const { error } = await supabaseClient.auth.update({ password });
+    const { error } = await supabaseClient.auth.updateUser({ password: password });
     if (error) setError(error.message);
     else setMessage("Your password has been updated");
     setLoading(false);

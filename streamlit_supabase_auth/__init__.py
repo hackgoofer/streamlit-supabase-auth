@@ -20,6 +20,7 @@ _RELEASE = os.getenv("DEBUG", "").lower() != "supabase_auth"
 # your component frontend. Everything else we do in this file is simply a
 # best practice.
 
+_RELEASE = False
 if not _RELEASE:
     _component_func = components.declare_component(
         # We give the component a simple, descriptive name
@@ -37,7 +38,7 @@ else:
     build_dir = os.path.join(parent_dir, "frontend/build")
     _component_func = components.declare_component("supabase_auth", path=build_dir)
 
-
+print(_component_func)
 # Create a wrapper function for the component. This is an optional
 # best practice - we could simply expose the component function returned by
 # `declare_component` and call it done. The wrapper allows us to customize

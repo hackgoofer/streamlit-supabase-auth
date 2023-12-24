@@ -12,6 +12,7 @@ import {
   Session,
   SupabaseClient,
 } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js'
 
 const getLocationHash = () => {
   try {
@@ -45,9 +46,8 @@ const getSessionFromUrl = async (supabase: SupabaseClient) => {
     const timeNow = Math.round(Date.now() / 1000);
     const expires_at = timeNow + parseInt(expires_in);
 
-    const { user, error } = await supabase.auth.api.getUser(access_token);
+    const { data: { user }, error } = await supabase.auth.getUser(access_token);
     if (error) throw error;
-
     const session: Session = {
       provider_token,
       access_token,
@@ -70,13 +70,20 @@ const getSessionFromUrl = async (supabase: SupabaseClient) => {
   }
 };
 
-const createClient = (supabaseUrl: string, supabaseKey: string) => {
-  // console.info("Creating Supabase client");
-  const client = new SupabaseClient(supabaseUrl, supabaseKey, {
-    detectSessionInUrl: false,
+const createSupaClient = (supabaseUrl: string, supabaseKey: string) => {
+  console.info("Creating Supabase client");
+  const client = createClient(supabaseUrl, supabaseKey, {
+    auth: {detectSessionInUrl: false},
   });
-  Streamlit.setComponentValue(client.auth.session());
-  Streamlit.setComponentReady();
+  console.log(client)
+  client.auth.getSession().then(({ data, error }) => {
+    console.log("data", data)
+    Streamlit.setComponentValue(data?.session);
+    Streamlit.setComponentReady();
+    console.log("about ready")
+    console.log(data?.session)
+    console.log("ready")
+  });
   // Parsing valid session from url will trigger a SIGNED_IN event
   getSessionFromUrl(client);
   return client;
@@ -129,25 +136,25 @@ const Container = (props: {
 
 const App = (props: ComponentProps) => {
   const { url, apiKey, providers, key } = props.args;
-
+  console.log("app")
   // Initialise supabase client once
   const [supabase, setSupabase] = useState<SupabaseClient>(() =>
-    createClient(url, apiKey)
+    createSupaClient(url, apiKey)
   );
 
   // Subscribe to auth events for each new client
   useEffect(() => {
     // console.info("Adding auth change listener");
-    const { data } = supabase.auth.onAuthStateChange(handleAuthEvent);
-    if (data) {
-      return () => data.unsubscribe();
+    const {data} = supabase.auth.onAuthStateChange(handleAuthEvent);
+    if (data.subscription) {
+      return () => data.subscription.unsubscribe();
     }
   }, [supabase]);
 
   // Recreate supabase client only when url or apiKey changes
   useEffect(() => {
     if (supabase["supabaseUrl"] !== url || supabase["supabaseKey"] !== apiKey) {
-      const client = createClient(url, apiKey);
+      const client = createSupaClient(url, apiKey);
       setSupabase(client);
     }
   }, [supabase, url, apiKey]);
